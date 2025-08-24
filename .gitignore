@@ -1,0 +1,110 @@
+# ESP32/ESP-IDF 项目 .gitignore 文件
+
+# ===== 构建输出目录 =====
+build/
+build_*/
+
+# ===== ESP-IDF 特定文件 =====
+sdkconfig
+sdkconfig.old
+sdkconfig.defaults
+sdkconfig.defaults.esp32c3
+
+# ===== 依赖管理 =====
+managed_components/
+dependencies.lock
+
+# ===== 日志文件 =====
+*.log
+log/
+logs/
+
+# ===== 临时文件 =====
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ===== IDE 和编辑器文件 =====
+.vscode/
+.idea/
+*.vscode
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+
+# ===== 系统文件 =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ===== 备份文件 =====
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+
+# ===== 编译生成的文件 =====
+*.o
+*.obj
+*.elf
+*.bin
+*.map
+*.hex
+*.a
+*.so
+*.dylib
+*.dll
+
+# ===== 测试和调试文件 =====
+test_results/
+coverage/
+*.gcov
+*.gcda
+*.gcno
+
+# ===== 文档生成 =====
+docs/_build/
+docs/html/
+docs/latex/
+
+# ===== 固件文件 =====
+*.bin
+*.hex
+*.elf
+*.map
+*.dis
+
+# ===== 配置文件备份 =====
+sdkconfig.backup
+sdkconfig.old
+
+# ===== 缓存文件 =====
+.cache/
+*.cache
+
+# ===== 临时构建文件 =====
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# ===== 项目特定文件 =====
+# 如果有其他需要忽略的文件类型，可以在这里添加
+
+# ===== 保留重要文件 =====
+!CMakeLists.txt
+!main/CMakeLists.txt
+!main/*.c
+!main/*.h
+!main/*.cpp
+!main/*.hpp
