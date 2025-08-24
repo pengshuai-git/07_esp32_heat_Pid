@@ -1,5 +1,6 @@
 #include "uart.h"
 #include "driver/uart.h"
+#include <string.h>  // 添加string.h头文件以支持strlen函数
 
 #define UART_PORT UART_NUM_1
 #define TX_GPIO 20

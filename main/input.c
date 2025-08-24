@@ -1,6 +1,8 @@
 #include "input.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"  // 添加FreeRTOS核心头文件
+#include "freertos/task.h"      // 添加任务相关头文件
 
 static const char *TAG = "INPUT";
 

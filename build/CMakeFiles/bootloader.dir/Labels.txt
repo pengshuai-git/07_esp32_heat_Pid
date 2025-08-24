@@ -1,0 +1,13 @@
+# Target labels
+ bootloader
+# Source files and their labels
+E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build/CMakeFiles/bootloader
+E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build/CMakeFiles/bootloader.rule
+E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build/CMakeFiles/bootloader-complete.rule
+E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule
