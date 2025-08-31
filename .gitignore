@@ -108,3 +108,36 @@ Makefile
 !main/*.h
 !main/*.cpp
 !main/*.hpp
+
+# ===== CMake 生成文件 =====
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+build.ninja
+rules.ninja
+*.cmake
+
+# ===== 编译生成的二进制文件 =====
+*.bin
+*.elf
+*.map
+
+# ===== Python 虚拟环境 =====
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# ===== 其他不必要的文件 =====
+*.diy
+*.json
+*.yaml
+*.yml
+*.env
+*.txt
+*.crt
+*.key
+*.pem
+*.der
+*.p12
+*.pfx

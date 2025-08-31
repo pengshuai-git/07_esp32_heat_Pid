@@ -1,7 +1,7 @@
 {
     "version":            "1",
     "project_name":       "esp32_smart_thermostat",
-    "project_version":    "cbe9886-dirty",
+    "project_version":    "0a79a0f-dirty",
     "project_path":       "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid",
     "idf_path":           "E:/espressif/v5.0.8/esp-idf",
     "build_dir":          "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build",

@@ -3,5 +3,8 @@
         "board/esp32c3-builtin.cfg"
     ],
     "idf.flashType": "UART",
-    "idf.portWin": "COM18"
+    "idf.portWin": "COM23",
+    "idf.espIdfPathWin": "e:\\espressif\\v5.0.8\\esp-idf",
+    "idf.toolsPathWin": "e:\\espressif_1",
+    "idf.pythonInstallPath": "e:\\espressif_1\\tools\\idf-python\\3.11.2\\python.exe"
 }
