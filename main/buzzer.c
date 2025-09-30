@@ -1,34 +1,34 @@
 #include "buzzer.h"
 #include "driver/ledc.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 static const char *TAG = "BUZZER";
 
-#define BUZZER_GPIO 6  // 与RGB G共享, 报警时暂停RGB G
+#define BUZZER_GPIO 7  // 有源蜂鸣器引脚（按你的硬件连接）
 
-// 初始化 (LEDC channel 1, 共享GPIO6)
 void buzzer_init(void) {
-    // 复用LEDC channel1 for buzzer
-    ESP_LOGI(TAG, "Buzzer initialized on GPIO6");
+    // 若 RGB 使用了 LEDC_CHANNEL_0 绑定 GPIO7，先停止，释放引脚控制权
+    ledc_stop(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0);
+
+    gpio_config_t io = {
+        .pin_bit_mask = (1ULL << BUZZER_GPIO),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = 0,
+        .pull_down_en = 0,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io);
+    gpio_set_level(BUZZER_GPIO, 0);
+    ESP_LOGI(TAG, "Active buzzer on GPIO%d initialized (GPIO output)", BUZZER_GPIO);
 }
 
-// 蜂鸣 (1000Hz, 1s)
+// 有源蜂鸣器：拉高即响，这里响 1 秒
 void buzzer_alarm(void) {
-    // 暂停RGB G
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 0);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
-
-    // 设置蜂鸣
-    ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0, 1000);  // 频率1000Hz
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 128);  // 50% duty
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+    gpio_set_level(BUZZER_GPIO, 1);
     vTaskDelay(pdMS_TO_TICKS(1000));
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 0);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
-
-    // 恢复RGB G频率
-    ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0, 1000);  // 恢复
-    ESP_LOGI(TAG, "Alarm buzzed");
+    gpio_set_level(BUZZER_GPIO, 0);
+    ESP_LOGI(TAG, "Active buzzer beeped 1s");
 }
