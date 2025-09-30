@@ -1,7 +1,7 @@
 {
     "version":            "1",
     "project_name":       "esp32_smart_thermostat",
-    "project_version":    "4b8b962-dirty",
+    "project_version":    "ed65cdc-dirty",
     "project_path":       "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid",
     "idf_path":           "E:/espressif/v5.0.8/esp-idf",
     "build_dir":          "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build",
@@ -744,8 +744,8 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/build/esp-idf/main/libmain.a",
-            "sources": [ "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/main.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/display.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/input.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/rgb.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/buzzer.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/uart.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/pid_controller.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/temperature.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/battery_monitor.c" ],
-            "include_dirs": [ "." ]
+            "sources": [ "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/main.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/pid_controller.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/main/web_server.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/Hardware/display.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/Hardware/key.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/Hardware/rgb.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/Hardware/buzzer.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/Hardware/uart.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/Hardware/adc_shared.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/Hardware/relay.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/Hardware/temperature.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/Hardware/battery_monitor.c", "E:/02_Learn/02_2_ESP32L/07_esp32_heat_Pid/Test/hardware_test.c" ],
+            "include_dirs": [ ".", "../Hardware", "../Test" ]
         },
         "mbedtls": {
             "alias": "idf::mbedtls",

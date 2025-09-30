@@ -1,29 +1,88 @@
 #include <stdio.h>
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
 #include "nvs_flash.h"
-#include "driver/gpio.h"
+#include "driver/uart.h"
+#include "driver/i2c.h"
+#include "esp_event.h"
+#include "esp_netif.h"
+#include "esp_wifi.h"
 
 // 组件头文件
-#include "temperature.h"
-#include "display.h"
-#include "rgb.h"
-#include "input.h"
-#include "buzzer.h"
-#include "uart.h"
+#include "../Hardware/temperature.h"
+#include "../Hardware/display.h"
+#include "../Hardware/rgb.h"
+#include "../Hardware/key.h"
+#include "../Hardware/buzzer.h"
+#include "../Hardware/uart.h"
+#include "../Hardware/battery_monitor.h"
+#include "../Hardware/relay.h"
+#include "web_server.h"
 
 static const char *TAG = "MAIN";
+// Wi-Fi SoftAP 配置（如需 STA，可后续扩展）
+#define WIFI_AP_SSID     "ESP32-PID"
+#define WIFI_AP_PASS     "12345678"  // 至少8位
+#define WIFI_AP_MAX_CONN 4
 
-// === 测试相关定义（请按实际硬件修改） ===
-#define RELAY_GPIO 10			// 继电器控制引脚（占位，按原理图修改）
-#define BUTTON1_GPIO 4		// 与 input.c 保持一致（增加）
-#define BUTTON2_GPIO 3		// 与 input.c 保持一致（减少）
-#define BUTTON3_GPIO 2		// 与 input.c 保持一致（确认/模式）
+static void wifi_init_softap(void) {
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_ap();
 
-static void hardware_self_test(void);
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    wifi_config_t ap_cfg = { 0 };
+    snprintf((char*)ap_cfg.ap.ssid, sizeof(ap_cfg.ap.ssid), "%s", WIFI_AP_SSID);
+    ap_cfg.ap.ssid_len = strlen(WIFI_AP_SSID);
+    snprintf((char*)ap_cfg.ap.password, sizeof(ap_cfg.ap.password), "%s", WIFI_AP_PASS);
+    ap_cfg.ap.max_connection = WIFI_AP_MAX_CONN;
+    ap_cfg.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
+    if (strlen(WIFI_AP_PASS) == 0) ap_cfg.ap.authmode = WIFI_AUTH_OPEN;
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "WiFi SoftAP 启动完成，SSID: %s，IP: 192.168.4.1", WIFI_AP_SSID);
+}
+
+// === 硬件引脚集中配置（便于复用移植） ===
+#define RELAY_GPIO 10
+
+// UART1
+#define UART_PORT_CFG UART_NUM_1
+#define UART_TX_GPIO 20
+#define UART_RX_GPIO 21
+#define UART_BAUD    115200
+
+// I2C0 for OLED
+#define I2C_PORT_CFG I2C_NUM_0
+#define I2C_SDA_IO   8
+#define I2C_SCL_IO   9
+#define I2C_CLK_HZ   400000
+#define OLED_ADDR    0x3C
+
+// RGB
+#define RGB_R_GPIO   6
+#define RGB_G_GPIO   5
+#define RGB_B_GPIO   7
+
+// Buttons
+#define BUTTON1_GPIO 4
+#define BUTTON2_GPIO 3
+#define BUTTON3_GPIO 2
+
+// Temperature/Battery ADC
+#define TEMP_ADC_CH   ADC_CHANNEL_0
+#define BATT_ADC_CH   ADC_CHANNEL_4
+#define NTC_REF_RES_CFG   100000.0f    // 若上拉电阻为1kΩ，这里设为1000
+#define VCC_SUPPLY    3.3f
+
+static void hardware_init(void);
 
 // 已移除旧的任务逻辑，仅保留硬件自检
 
@@ -40,118 +99,26 @@ void app_main(void) {
 
     // 仅初始化自检所需模块
     ESP_LOGI(TAG, "初始化自检相关硬件...");
-    uart_init();
-    input_init();
-    rgb_init();
-    buzzer_init();
-    display_init();
-    temperature_init();
+    hardware_init();
 
-    ESP_LOGI(TAG, "初始化完成，开始自检");
-    hardware_self_test();
+    // 启动 Web 服务（提供前端与 API）
+    wifi_init_softap();
+    web_server_start();
 
-    ESP_LOGI(TAG, "自检完成，系统待机");
+    ESP_LOGI(TAG, "初始化完成，进入待机/WEB服务模式");
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 
-// 硬件自检：电池→按键→温度→RGB→蜂鸣→OLED→继电器
-static void hardware_self_test(void) {
-	ESP_LOGI(TAG, "===== 硬件自检开始 =====");
-
-	// 1) 电池电压检测
-	ESP_LOGI(TAG, "[1/7] 电池电压检测");
-	esp_adc_cal_characteristics_t adc_chars;
-	adc1_config_width(ADC_WIDTH_BIT_12);
-	adc1_config_channel_atten(ADC1_CHANNEL_4, ADC_ATTEN_DB_12);
-	esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_12, ADC_WIDTH_BIT_12, 1100, &adc_chars);
-	int adc_reading = adc1_get_raw(ADC1_CHANNEL_4);
-	uint32_t voltage_mv = esp_adc_cal_raw_to_voltage(adc_reading, &adc_chars);
-	float battery_voltage = (voltage_mv * 2.0f) / 1000.0f; // 假设2:1分压
-	float battery_percent = ((battery_voltage - 3.0f) / 1.2f) * 100.0f;
-	if (battery_percent < 0) battery_percent = 0;
-	if (battery_percent > 100) battery_percent = 100;
-	ESP_LOGI(TAG, "电池电压: %.2fV (%.0f%%), ADC=%d", battery_voltage, battery_percent, adc_reading);
-
-    // 2) 按键功能（等待用户分别按下1/2/3）
-	ESP_LOGI(TAG, "[2/7] 按键测试：请依次按下 按键1(加)+ 按键2(减)- 按键3(确认)");
-	// 确保GPIO已为输入上拉（input_init 已配置，但这里再设置一遍以防万一）
-	gpio_config_t io_conf = {
-		.intr_type = GPIO_INTR_DISABLE,
-		.mode = GPIO_MODE_INPUT,
-		.pin_bit_mask = (1ULL<<BUTTON1_GPIO) | (1ULL<<BUTTON2_GPIO) | (1ULL<<BUTTON3_GPIO),
-		.pull_down_en = 0,
-		.pull_up_en = 1,
-	};
-	gpio_config(&io_conf);
-
-	bool b1_ok = false, b2_ok = false, b3_ok = false;
-	TickType_t start_ticks = xTaskGetTickCount();
-	while (!(b1_ok && b2_ok && b3_ok)) {
-		if (!b1_ok && gpio_get_level(BUTTON1_GPIO) == 0) { ESP_LOGI(TAG, "按键1 检测到"); b1_ok = true; vTaskDelay(pdMS_TO_TICKS(300)); }
-		if (!b2_ok && gpio_get_level(BUTTON2_GPIO) == 0) { ESP_LOGI(TAG, "按键2 检测到"); b2_ok = true; vTaskDelay(pdMS_TO_TICKS(300)); }
-		if (!b3_ok && gpio_get_level(BUTTON3_GPIO) == 0) { ESP_LOGI(TAG, "按键3 检测到"); b3_ok = true; vTaskDelay(pdMS_TO_TICKS(300)); }
-		vTaskDelay(pdMS_TO_TICKS(20));
-		// 可选：超时提示
-		if (xTaskGetTickCount() - start_ticks > pdMS_TO_TICKS(30000)) {
-			ESP_LOGW(TAG, "按键测试等待超时，请继续按键...");
-			start_ticks = xTaskGetTickCount();
-		}
-	}
-
-	// 3) 温度传感器
-	ESP_LOGI(TAG, "[3/7] 温度传感器测试：读取3次");
-	for (int i = 0; i < 3; i++) {
-		float t = temperature_read();
-		ESP_LOGI(TAG, "温度采集 #%d: %.2f°C", i+1, t);
-		vTaskDelay(pdMS_TO_TICKS(500));
-	}
-
-    // 4) 小灯/LED 测试（GPIO5=红, GPIO6=绿）：分别间隔1s亮2s，结束后红绿常亮
-    // 说明：当前 LEDC 绑定 GPIO5(通道2) 与 GPIO6(通道1)，用 set_rgb 控制占空
-    ESP_LOGI(TAG, "[4/7] 小灯测试：GPIO5(红) 与 GPIO6(绿) 分别间隔1s亮2s，结束后常亮");
-    // 红亮2s
-    set_rgb(0, 0, 255); // 点亮 GPIO5（对应原BLUE通道，实际连到你的红灯）
-    vTaskDelay(pdMS_TO_TICKS(2000));
-    set_rgb(0, 0, 0);
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    // 绿亮2s
-    set_rgb(0, 255, 0); // 点亮 GPIO6（绿）
-    vTaskDelay(pdMS_TO_TICKS(2000));
-    set_rgb(0, 0, 0);
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    // 红绿常亮
-    // 这里用同时点亮 GPIO5 与 GPIO6（不点亮 GPIO7）
-    // 先点亮绿
-    set_rgb(0, 255, 0);
-    // 再叠加点亮 GPIO5：由于 set_rgb 会覆盖三通道，这里再次调用组合值
-    set_rgb(0, 255, 255); // GPIO6(绿) + GPIO5(原蓝通道)
-
-	// 5) 蜂鸣器 2 秒
-	ESP_LOGI(TAG, "[5/7] 蜂鸣器测试：响2秒");
-	buzzer_alarm();
-	buzzer_alarm();
-
-    // 6) OLED 显示 HELLO（并保持显示）
-    ESP_LOGI(TAG, "[6/7] OLED 测试：显示 HELLO 并保持");
-    display_show_text("HELLO", "", "");
-    vTaskDelay(pdMS_TO_TICKS(1500));
-
-    // 7) 继电器测试：拉高2秒 → 拉低2秒（手动观察指示灯）
-	ESP_LOGI(TAG, "[7/7] 继电器测试：HIGH 2s -> LOW 2s");
-	gpio_config_t rconf = {
-		.intr_type = GPIO_INTR_DISABLE,
-		.mode = GPIO_MODE_OUTPUT,
-		.pin_bit_mask = (1ULL<<RELAY_GPIO),
-		.pull_down_en = 0,
-		.pull_up_en = 0,
-	};
-	gpio_config(&rconf);
-	gpio_set_level(RELAY_GPIO, 1);
-	vTaskDelay(pdMS_TO_TICKS(2000));
-	gpio_set_level(RELAY_GPIO, 0);
-	vTaskDelay(pdMS_TO_TICKS(2000));
-
-    ESP_LOGI(TAG, "===== 硬件自检完毕 =====");
+static void hardware_init(void) {
+    uart_init(UART_PORT_CFG, UART_TX_GPIO, UART_RX_GPIO, UART_BAUD);
+    key_init(BUTTON1_GPIO, BUTTON2_GPIO, BUTTON3_GPIO);
+    rgb_init(RGB_R_GPIO, RGB_G_GPIO, RGB_B_GPIO);
+    buzzer_init(7);
+    display_init(I2C_PORT_CFG, I2C_SDA_IO, I2C_SCL_IO, I2C_CLK_HZ, OLED_ADDR);
+    temperature_init(TEMP_ADC_CH, NTC_REF_RES_CFG, VCC_SUPPLY);
+    // 补充：继电器 PWM 与电池监控
+    relay_init_pwm(RELAY_GPIO, 1000);
+    battery_monitor_init(BATT_ADC_CH, 2.0f, 3.0f, 4.2f);
 }

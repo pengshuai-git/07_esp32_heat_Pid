@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESP32 控制面板</title>
+  <style>
+:root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--accent:#22c55e;--muted:#94a3b8}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,Segoe UI,Roboto}
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1f2937}
+nav button{margin-right:8px;padding:6px 12px;background:#1f2937;border:1px solid #334155;color:var(--text);border-radius:6px;cursor:pointer}
+nav button.active{background:var(--accent);border-color:var(--accent);color:#0b1220}
+main{padding:16px}
+.page{display:none}.page.active{display:block}
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid #1f2937;border-radius:10px;padding:12px;margin-bottom:12px}
+.battery{width:100%;height:16px;background:#1f2937;border:1px solid #334155;border-radius:8px;overflow:hidden}
+.battery .bar{height:100%;width:0;background:linear-gradient(90deg,#ef4444,#f59e0b,#22c55e)}
+input{width:100%;padding:8px;border-radius:8px;border:1px solid #334155;background:#0b1220;color:var(--text);margin:6px 0}
+button{padding:8px 12px;border-radius:8px;border:1px solid #334155;background:#0b1220;color:var(--text);cursor:pointer}
+button:hover{border-color:#475569}
+footer{padding:8px 16px;border-top:1px solid #1f2937;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ESP32 控制面板</h1>
+    <nav>
+      <button id="tab-test" class="active">硬件测试</button>
+      <button id="tab-pid">PID 控制</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="page-test" class="page active">
+      <div class="card">
+        <h2>电池电量</h2>
+        <div class="battery">
+          <div id="battery-bar" class="bar"></div>
+        </div>
+        <div id="battery-text">--%</div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2>蜂鸣器</h2>
+          <button id="btn-beep">鸣叫 1s</button>
+        </div>
+        <div class="card">
+          <h2>LED 控制</h2>
+          <div class="leds">
+            <button id="led-red-toggle">红灯 切换</button>
+            <button id="led-green-toggle">绿灯 切换</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2>OLED 显示</h2>
+          <input id="oled-text" placeholder="输入要显示的文字">
+          <button id="oled-send">发送到屏幕</button>
+        </div>
+        <div class="card">
+          <h2>继电器</h2>
+          <button id="relay-toggle">继电器 切换</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>温度（实时）</h2>
+        <canvas id="temp-chart" height="160"></canvas>
+        <div id="temp-text">--.- °C</div>
+      </div>
+    </section>
+
+    <section id="page-pid" class="page">
+      <div class="grid-2">
+        <div class="card">
+          <h2>设定与参数</h2>
+          <label>目标温度(°C)<input id="pid-setpoint" type="number" min="0" max="100" step="0.5" value="40"></label>
+          <label>Kp<input id="pid-kp" type="number" step="0.01" value="2.00"></label>
+          <label>Ki<input id="pid-ki" type="number" step="0.001" value="0.100"></label>
+          <label>Kd<input id="pid-kd" type="number" step="0.01" value="0.50"></label>
+          <label>温度上限(°C)<input id="pid-max" type="number" min="0" max="120" step="0.5" value="80"></label>
+          <div>
+            <button id="pid-apply">应用参数</button>
+            <button id="pid-sync" title="从设备读取并覆盖本地输入">同步设备参数</button>
+            <button id="pid-start">开始控制</button>
+            <button id="pid-stop">停止控制</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2>状态</h2>
+          <div id="pid-status">未运行</div>
+          <div>当前温度：<span id="pid-temp">--.-</span> °C</div>
+          <div>当前输出：<span id="pid-output">--</span> %</div>
+          <div>ADC原始：<span id="pid-adc">--</span></div>
+          <div>等效电压：<span id="pid-mv">--</span> mV</div>
+          <div>PWM占空：<span id="pid-pwm">--</span> %</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>曲线</h2>
+        <canvas id="pid-chart" height="180"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span id="conn">连接中...</span>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+const $ = (s)=>document.querySelector(s);
+const qs = new URLSearchParams(location.search);
+
+function pickBase() {
+  const fromQS = qs.get('esp');
+  if (fromQS) return fromQS.replace(/\/$/, '');
+  const saved = localStorage.getItem('esp_base');
+  if (saved) return saved;
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:') {
+    return 'http://192.168.4.1';
+  }
+  return '';
+}
+
+const state = { base: pickBase(), ws:null, tempData:[] };
+
+function setActive(tab){
+  $('#tab-test').classList.toggle('active', tab==='test');
+  $('#tab-pid').classList.toggle('active', tab==='pid');
+  $('#page-test').classList.toggle('active', tab==='test');
+  $('#page-pid').classList.toggle('active', tab==='pid');
+}
+
+$('#tab-test').onclick=()=>setActive('test');
+$('#tab-pid').onclick=()=>setActive('pid');
+
+// Charts
+const tctx = $('#temp-chart').getContext('2d');
+const tempChart = new Chart(tctx,{type:'line',data:{labels:[],datasets:[{label:'温度°C',data:[],borderColor:'#22c55e',tension:.25}]},options:{scales:{x:{display:false},y:{min:0,max:100}}}});
+
+const pctx = $('#pid-chart').getContext('2d');
+const pidChart = new Chart(pctx,{type:'line',data:{labels:[],datasets:[{label:'温度',data:[],borderColor:'#3b82f6',tension:.25},{label:'设定',data:[],borderColor:'#f59e0b',tension:.25},{label:'输出%',data:[],borderColor:'#ef4444',tension:.25,yAxisID:'y1'}]},options:{scales:{x:{display:false},y:{min:0,max:120},y1:{position:'right',min:0,max:100}}}});
+
+async function api(path,opts){
+  const url = (state.base || location.origin) + path;
+  const r = await fetch(url,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Connection':'close'},
+    body:JSON.stringify(opts||{}),
+    cache:'no-store'
+  });
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json().catch(()=>({ok:true}));
+}
+
+// Test page actions
+$('#btn-beep').onclick=()=>api('/api/beep');
+$('#led-red-toggle').onclick=()=>api('/api/led',{r:'toggle'});
+$('#led-green-toggle').onclick=()=>api('/api/led',{g:'toggle'});
+$('#oled-send').onclick=()=>{
+  const text = $('#oled-text').value || '';
+  api('/api/oled',{text});
+}
+$('#relay-toggle').onclick=()=>api('/api/relay',{toggle:true});
+
+// PID page actions
+const editing = { sp:false, kp:false, ki:false, kd:false };
+const dirty   = { sp:false, kp:false, ki:false, kd:false };
+['pid-setpoint','pid-kp','pid-ki','pid-kd'].forEach(id=>{
+  const el = $('#'+id);
+  el.addEventListener('focus', ()=>{ if(id==='pid-setpoint') editing.sp=true; if(id==='pid-kp') editing.kp=true; if(id==='pid-ki') editing.ki=true; if(id==='pid-kd') editing.kd=true; });
+  el.addEventListener('blur',  ()=>{ if(id==='pid-setpoint') editing.sp=false; if(id==='pid-kp') editing.kp=false; if(id==='pid-ki') editing.ki=false; if(id==='pid-kd') editing.kd=false; });
+  el.addEventListener('input', ()=>{ if(id==='pid-setpoint') dirty.sp=true; if(id==='pid-kp') dirty.kp=true; if(id==='pid-ki') dirty.ki=true; if(id==='pid-kd') dirty.kd=true; });
+});
+
+function pushParamsToUI(obj){
+  if('setpoint' in obj && !editing.sp && !dirty.sp) $('#pid-setpoint').value = obj.setpoint;
+  if('kp' in obj && !editing.kp && !dirty.kp) $('#pid-kp').value = obj.kp;
+  if('ki' in obj && !editing.ki && !dirty.ki) $('#pid-ki').value = obj.ki;
+  if('kd' in obj && !editing.kd && !dirty.kd) $('#pid-kd').value = obj.kd;
+}
+
+$('#pid-apply').onclick=async()=>{
+  try{
+    const r = await api('/api/pid/params',{
+      setpoint: parseFloat($('#pid-setpoint').value),
+      kp: parseFloat($('#pid-kp').value),
+      ki: parseFloat($('#pid-ki').value),
+      kd: parseFloat($('#pid-kd').value),
+      max: parseFloat($('#pid-max').value),
+    });
+    pushParamsToUI(r);
+    // 应用后清除本地脏标记
+    dirty.sp = dirty.kp = dirty.ki = dirty.kd = false;
+  }catch(e){}
+}
+$('#pid-sync').onclick=async()=>{
+  try{
+    const s = await fetch(state.base + '/api/pid/status', {method:'GET', cache:'no-store'}).then(r=>r.json());
+    dirty.sp = dirty.kp = dirty.ki = dirty.kd = false;
+    pushParamsToUI(s);
+  }catch(e){}
+}
+$('#pid-start').onclick=async()=>{
+  const r = await api('/api/pid/start');
+  try{ pushParamsToUI(r); }catch{}
+};
+$('#pid-stop').onclick=()=>api('/api/pid/stop');
+
+// Live update via WebSocket (fallback to polling)
+function connectWS(){
+  let origin = state.base || location.origin;
+  let url = origin.replace('http','ws') + '/ws';
+  try{ state.ws = new WebSocket(url); }catch(e){ state.ws=null; poll(); return; }
+  state.ws.onopen=()=> $('#conn').textContent='已连接';
+  state.ws.onclose=()=> { $('#conn').textContent='断开，重连中...'; setTimeout(connectWS,1500); };
+  state.ws.onmessage=(ev)=>{
+    let msg; try{ msg = JSON.parse(ev.data); }catch{ return; }
+    if(msg.type==='battery'){
+      const pct = Math.round(msg.percent);
+      $('#battery-bar').style.width = pct+'%';
+      $('#battery-text').textContent = pct+'%';
+    }
+    if(msg.type==='temp'){
+      $('#temp-text').textContent = msg.value.toFixed(1)+' °C';
+      pushChart(tempChart,msg.value);
+      pushPid(msg);
+    }
+    if(msg.type==='pid'){
+      pushPid(msg);
+      $('#pid-status').textContent = msg.running? '运行中':'未运行';
+      $('#pid-output').textContent = (msg.output??0).toFixed(0);
+      $('#pid-temp').textContent = (msg.temp??0).toFixed(1);
+    }
+  }
+}
+
+function pushChart(chart,val){
+  const d = chart.data.datasets[0].data; const l = chart.data.labels;
+  d.push(val); l.push(''); if(d.length>120){ d.shift(); l.shift(); }
+  chart.update('none');
+}
+function pushPid(msg){
+  const c = pidChart;
+  c.data.labels.push(''); if(c.data.labels.length>120) c.data.labels.shift();
+  c.data.datasets[0].data.push(msg.temp??msg.value??0); if(c.data.datasets[0].data.length>120) c.data.datasets[0].data.shift();
+  c.data.datasets[1].data.push(msg.setpoint??0); if(c.data.datasets[1].data.length>120) c.data.datasets[1].data.shift();
+  c.data.datasets[2].data.push(msg.output??0); if(c.data.datasets[2].data.length>120) c.data.datasets[2].data.shift();
+  c.update('none');
+}
+
+async function poll(){
+  try{
+    const origin = state.base || location.origin;
+    const b = await fetch(origin + '/api/battery?t=' + Date.now(), {method:'GET', cache:'no-store'}).then(r=>r.json());
+    const t = await fetch(origin + '/api/temp?t=' + Date.now(), {method:'GET', cache:'no-store'}).then(r=>r.json());
+    $('#battery-bar').style.width = Math.round(b.percent)+'%';
+    $('#battery-text').textContent = Math.round(b.percent)+'%';
+    $('#temp-text').textContent = t.value.toFixed(1)+' °C';
+    pushChart(tempChart,t.value);
+  }catch{}
+  setTimeout(poll,1000);
+}
+
+async function autoConnect() {
+  const candidates = [];
+  if (state.base) candidates.push(state.base);
+  candidates.push(location.origin);
+  candidates.push('http://192.168.4.1');
+
+  for (const base of [...new Set(candidates)]) {
+    try {
+      const r = await fetch(base + '/api/temp?t=' + Date.now(), {method:'GET', cache:'no-store'});
+      if (r.ok) {
+        state.base = base.replace(/\/$/, '');
+        localStorage.setItem('esp_base', state.base);
+        $('#conn').textContent = '已连接到 ' + state.base;
+        connectWS();
+        poll();
+        // 周期拉取 PID 状态驱动界面更新
+        setInterval(async()=>{
+          try{
+            const s = await fetch(state.base + '/api/pid/status', {method:'GET', cache:'no-store'}).then(r=>r.json());
+            $('#pid-status').textContent = s.running? '运行中':'未运行';
+            $('#pid-temp').textContent = (s.temp??0).toFixed(1);
+            $('#pid-output').textContent = (s.output??0).toFixed(0);
+            $('#pid-adc').textContent = s.adc ?? '--';
+            $('#pid-mv').textContent  = s.mv ?? '--';
+            $('#pid-pwm').textContent = s.pwm ?? '--';
+            pushParamsToUI(s);
+            pushPid({temp:s.temp??0,setpoint:s.setpoint??0,output:s.output??0});
+          }catch{}
+        }, 1000);
+        return;
+      }
+    } catch {}
+  }
+  $('#conn').textContent = '未找到设备，重试中...';
+  setTimeout(autoConnect, 1500);
+}
+
+autoConnect();
+  </script>
+</body>
+</html>
+
+

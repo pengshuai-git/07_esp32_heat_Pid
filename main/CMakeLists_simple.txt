@@ -1,3 +1,0 @@
-# 简化的CMakeLists.txt用于电池监控测试
-idf_component_register(SRCS "simple_battery_test.c"
-                       INCLUDE_DIRS ".") 
